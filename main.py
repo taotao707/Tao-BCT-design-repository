@@ -379,6 +379,7 @@ def main_worker(gpu, ngpus_per_node, args):
         train(train_loader, model, criterion, optimizer, epoch, args, ngpus_per_node,
               old_model=old_model)
 
+        #如果需要评估验证集
         if args.val:
             # evaluate on validation set
             acc1 = validate(val_loader, model, criterion, args, cls_num=cls_num)
