@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # OpenBCT
 
 ## Introduction
@@ -132,7 +133,5 @@ If you have any question, please feel free to contact
 Yantao Shen: ytshen@link.cuhk.edu.hk
 ```
 
-
-
-
-
+# Tao-BCT-design-repository
+## another change
