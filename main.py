@@ -144,13 +144,16 @@ def main():
     #args.world_size = 1
     args.distributed = args.world_size > 1 or args.multiprocessing_distributed
 
+    #获取gpu数量，用作后面每个进程gpu编号
     ngpus_per_node = torch.cuda.device_count()
+    print('your gpu num is {}'.format(ngpus_per_node))
     if args.multiprocessing_distributed:
         # Since we have ngpus_per_node processes per node, the total world_size
-        # needs to be adjusted accordingly，world_size单机训练时为1，机器数
+        # needs to be adjusted accordingly，world_size单机多卡训练时为1，乘后为gpu数量
         args.world_size = ngpus_per_node * args.world_size
         # Use torch.multiprocessing.spawn to launch distributed processes: the
         # main_worker process function
+        print('choose multiprocessing_distributed training, process num is {}'.format(args.world_size))
         mp.spawn(main_worker, nprocs=ngpus_per_node, args=(ngpus_per_node, args))
     else:
         # Simply call main_worker function
@@ -169,7 +172,7 @@ def main_worker(gpu, ngpus_per_node, args):
             args.rank = int(os.environ["RANK"])
         if args.multiprocessing_distributed:
             # For multiprocessing distributed training, rank needs to be the
-            # global rank among all the processes，rank单机训练时为0
+            # global rank among all the processes，rank单机训练时为0，加过gpu后等于gpu号
             args.rank = args.rank * ngpus_per_node + gpu
             # When using a single GPU per process and per
             # DistributedDataParallel, we need to divide the batch size
@@ -178,6 +181,7 @@ def main_worker(gpu, ngpus_per_node, args):
             args.workers = int((args.workers + ngpus_per_node - 1) / ngpus_per_node)
         dist.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
                                 world_size=args.world_size, rank=args.rank)
+        print('multiprocessing init, current process is {}'.format(args.rank))
     cudnn.benchmark = True
 
     # Data loading code
@@ -337,7 +341,7 @@ def main_worker(gpu, ngpus_per_node, args):
         validate(val_loader, model, criterion, args, cls_num=cls_num)
         return
 
-    #产生一个伪分类器，用来记录旧模型针对每个label下images的平均feature值
+    #产生一个伪分类器，用来记录旧模型针对每个label下images的平均feature值,组成一个k*hidden的矩阵
     if args.generate_cls:
         print('==> generating the pseudo classifier on current training data')
         if args.train_img_list is not None:
@@ -370,7 +374,7 @@ def main_worker(gpu, ngpus_per_node, args):
 
     #开始每个epoch训练
     for epoch in range(args.start_epoch, args.epochs):
-        if args.distributed:
+        if args.distributed: #分布式训练设置
             train_sampler.set_epoch(epoch)
         #每30个epoch降低学习率(0.1**)
         adjust_learning_rate(optimizer, epoch, args)
@@ -389,6 +393,7 @@ def main_worker(gpu, ngpus_per_node, args):
         is_best = acc1 > best_acc1
         best_acc1 = max(acc1, best_acc1)
 
+        #单机多卡训练的时候，编号为0-N-1，所以只有第一个主卡会运行下面程序，保存每个epoch的模型
         if not args.multiprocessing_distributed or (args.multiprocessing_distributed
                                                     and args.rank % ngpus_per_node == 0):
             if not os.path.isdir('./results'):
@@ -421,7 +426,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args, ngpus_per_node
     top1 = AverageMeter('Acc@1', ':6.2f')
     top5 = AverageMeter('Acc@5', ':6.2f')
 
-    if args.old_fc is not None:
+    if args.old_fc is not None: #BCT训练
         n2o_map = np.load(args.n2o_map, allow_pickle=True).item() if args.n2o_map is not None else None
         old_losses = AverageMeter('Old Loss', ':.4e')
         progress = ProgressMeter(
@@ -440,7 +445,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args, ngpus_per_node
                 len(train_loader),
                 [batch_time, data_time, losses, old_losses, contra_losses, top1, top5],
                 prefix="Epoch: [{}]".format(epoch))
-    else:
+    else: #来l2或新模型训练
         if args.l2:
             l2_losses = AverageMeter('L2 Loss', ':.4e')
             progress = ProgressMeter(
@@ -468,7 +473,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args, ngpus_per_node
         if torch.cuda.is_available():
             target = target.cuda(args.gpu, non_blocking=True)
 
-        if args.old_fc is None:
+        if args.old_fc is None: #l2框架或新模型训练
             # if use l2 loss between new and old model
             if args.l2:
                 l2_criterion = nn.MSELoss().cuda(args.gpu)
@@ -486,12 +491,12 @@ def train(train_loader, model, criterion, optimizer, epoch, args, ngpus_per_node
                 output = model(images)
                 loss = criterion(output, target)
                 old_loss = 0.
-        else:
+        else: #BCT训练法, new_fc, old_fc, feature
             output, old_output, output_feat = model(images)
             loss = criterion(output, target)
             valid_ind = []
             o_target = []
-            if n2o_map is not None:
+            if n2o_map is not None: #新类到旧类的映射
                 for ind, t in enumerate(target):
                     if int(t) in n2o_map:
                         o_target.append(n2o_map[int(t)])
@@ -589,6 +594,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args, ngpus_per_node
         batch_time.update(time.time() - end)
         end = time.time()
 
+        #打印训练进度
         if i % args.print_freq == 0:
             if args.multiprocessing_distributed:
                 if args.rank % ngpus_per_node == 0:

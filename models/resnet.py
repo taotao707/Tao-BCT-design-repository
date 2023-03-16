@@ -268,7 +268,7 @@ class ResNet(nn.Module):
             else:
                 return F.normalize(x, dim=1)
 
-        if self.norm_sm:
+        if self.norm_sm: #normalized SoftMax
             normed_kernel = torch.nn.functional.normalize(self.kernel, dim=1)
             output_feat = torch.nn.functional.normalize(x, dim=1)
             cos_theta = torch.mm(output_feat, normed_kernel)
@@ -276,7 +276,8 @@ class ResNet(nn.Module):
             score = cos_theta * self.s
         else:
             score = self.fc(x)
-        if self.old_fc is not None:
+
+        if self.old_fc is not None: #BCT训练法
             if self.old_d <= x.size(1):
                 x = x[:, :self.old_d]
                 old_score = self.old_fc(x)
