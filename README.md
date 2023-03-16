@@ -67,7 +67,7 @@ python main.py your_dataset_dir -a resnet50 --pretrained --checkpoint your_model
 For training an old model without any regularization,
 
 ```shell
-python main.py your_dataset_dir --dist-url 'tcp://127.0.0.1:FREEPORT' --dist-backend 'nccl' --multiprocessing-distributed --world-size 1 --rank 0  --train-img-list imgnet_train_img_list_for_old.txt -a resnet18 
+python main.py 'E:/HHUC design Representation Learning/dataset_select/places365_standard/' --dist-url 'tcp://127.0.0.1:8080' --dist-backend 'nccl' --multiprocessing-distributed --world-size 1 --rank 0  --train-img-list imgnet_train_img_list_for_old.txt -a resnet18 
 ```
 
 For training a new model with infulence loss,
