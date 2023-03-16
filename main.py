@@ -74,8 +74,8 @@ parser.add_argument('--world-size', default=-1, type=int, #world_size
 parser.add_argument('--rank', default=-1, type=int, #rank
                     help='node rank for distributed training')
 parser.add_argument('--dist-url', default='tcp://224.66.41.62:23456', type=str, #dist_url
-                    help='url used to set up distributed training') #dist_backend
-parser.add_argument('--dist-backend', default='nccl', type=str,
+                    help='url used to set up distributed training') 
+parser.add_argument('--dist-backend', default='nccl', type=str, #dist_backend:linux(nccl), windows(gloo)
                     help='distributed backend')
 parser.add_argument('--seed', default=None, type=int,
                     help='seed for initializing training. ')
@@ -308,6 +308,7 @@ def main_worker(gpu, ngpus_per_node, args):
     optimizer = torch.optim.SGD(model.parameters(), args.lr,
                                 momentum=args.momentum,
                                 weight_decay=args.weight_decay)
+    print('criterion and optimizer is ready!')
 
     # optionally resume from a checkpoint, 从上次中断点开始继续训练
     if args.resume:
@@ -373,9 +374,12 @@ def main_worker(gpu, ngpus_per_node, args):
 
 
     #开始每个epoch训练
+    print('start epoch training...')
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed: #分布式训练设置
             train_sampler.set_epoch(epoch)
+        print('{} epoch start...'.format(epoch))
+
         #每30个epoch降低学习率(0.1**)
         adjust_learning_rate(optimizer, epoch, args)
 
@@ -743,7 +747,8 @@ def accuracy(output, target, topk=(1,)):
 
         res = []
         for k in topk:
-            correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
+            #correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
+            correct_k = correct[:k].reshape(-1).float().sum(0, keepdim=True)
             res.append(correct_k.mul_(100.0 / batch_size))
         return res
 
