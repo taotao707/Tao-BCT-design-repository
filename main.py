@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import argparse
 import os
 import random
@@ -86,9 +87,9 @@ parser.add_argument('--multiprocessing-distributed', action='store_true', #multi
                          'N processes per node, which has N GPUs. This is the '
                          'fastest way to use PyTorch for either single node or '
                          'multi node data parallel training')
-parser.add_argument('--old-fc', default=None, type=str, metavar='PATH',
+parser.add_argument('--old-fc', default=None, type=str, metavar='PATH', #old_fc
                     help='old-classifier dir')
-parser.add_argument('--n2o-map', default=None, type=str, metavar='PATH',
+parser.add_argument('--n2o-map', default=None, type=str, metavar='PATH', #n2o_map
                     help='new to old label mapping dictionary dir')
 parser.add_argument('--cross-eval', action='store_true',
                     help='conduct cross evaluation between diff models')
@@ -231,6 +232,7 @@ def main_worker(gpu, ngpus_per_node, args):
             normalize,])),
         batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True)
+    print('==> val loading is done!')
 
     # create model, pretrained model or new model?
     if args.pretrained:
@@ -263,7 +265,7 @@ def main_worker(gpu, ngpus_per_node, args):
                                            use_feat=args.use_feat,
                                            num_classes=cls_num,
                                            norm_sm=args.use_norm_sm)
-    #使用l2 baseline训练
+    #使用l2 baseline训练???
     if args.lwf:
         # According to Learning without Forgetting original paper (Li et.al. 2016),
         # the old classifier should be finetuned. However, it will not work for BCT.
@@ -534,15 +536,15 @@ def train(train_loader, model, criterion, optimizer, epoch, args, ngpus_per_node
                 pos_old_output_feat = old_model(images)
                 # find the hardest negative
                 n = target.size(0)
-                mask = target.expand(n, n).eq(target.expand(n, n).t())
+                mask = target.expand(n, n).eq(target.expand(n, n).t()) #筛选出batch中的异同label，方便挑选每个positive的hard negative
                 dist = torch.pow(output_feat, 2).sum(dim=1, keepdim=True).expand(n, n) + \
-                       torch.pow(pos_old_output_feat, 2).sum(dim=1, keepdim=True).expand(n, n).t()
+                       torch.pow(pos_old_output_feat, 2).sum(dim=1, keepdim=True).expand(n, n).t() #衡量每个positive在batch中最hard的样本为negative
                 dist = dist - 2 * torch.mm(output_feat, pos_old_output_feat.t())
                 hardest_neg = []
                 for index in range(n):
                     hardest_neg.append(pos_old_output_feat[dist[index][mask[index] == 0].argmin()])
                 hardest_neg = torch.stack(hardest_neg)
-                tri_loss = tri_criterion(output_feat, pos_old_output_feat, hardest_neg)
+                tri_loss = tri_criterion(output_feat, pos_old_output_feat, hardest_neg) #(anchor, positive, negative)
 
             # if use contrastive loss between old and new model
             if args.contra:
@@ -554,15 +556,15 @@ def train(train_loader, model, criterion, optimizer, epoch, args, ngpus_per_node
                 for index in range(n):
                     # This follows supervised contrastive learning (By Khosla & Teterwak et.al. NIPS 2020)
                     contra_loss_inside = 0.
-                    pos_scores = torch.mm(output_feat[index].unsqueeze(0), old_output_feat[target[index] == target].t())
-                    neg_scores = torch.mm(output_feat[index].unsqueeze(0), old_output_feat[target[index] != target].t())
+                    pos_scores = torch.mm(output_feat[index].unsqueeze(0), old_output_feat[target[index] == target].t()) #old_output_feat中所有label相同的
+                    neg_scores = torch.mm(output_feat[index].unsqueeze(0), old_output_feat[target[index] != target].t()) #old_output_feat中所有label不同的
                     pos_set_size = pos_scores.size(0)
                     for pos_score in pos_scores:
-                        all_scores = torch.cat((pos_score.unsqueeze(0), neg_scores), 1)
-                        all_scores /= args.temp
+                        all_scores = torch.cat((pos_score.unsqueeze(0), neg_scores), 1) #第一个位置是pos，其他位置是neg
+                        all_scores /= args.temp                                         #除以温度系数
                         # all positive samples are placed at 0-th position
-                        p_label = torch.empty(1, dtype=torch.long).zero_().cuda()
-                        contra_loss_inside += criterion(all_scores, p_label)
+                        p_label = torch.empty(1, dtype=torch.long).zero_().cuda()  #创造一个0标量
+                        contra_loss_inside += criterion(all_scores, p_label)       #也就是求-log(exp(q*k+)/sum(exp(q*ki)))
                     contra_loss += contra_loss_inside / pos_set_size
                 contra_loss /= n
 
@@ -711,7 +713,7 @@ def cudalize(model, ngpus_per_node, args):
     return model
 
 
-class ProgressMeter(object):
+class ProgressMeter(object): #过程信息打印batch: 23/1000
     def __init__(self, num_batches, meters, prefix=""):
         self.batch_fmtstr = self._get_batch_fmtstr(num_batches)
         self.meters = meters
@@ -723,7 +725,7 @@ class ProgressMeter(object):
         print('\t'.join(entries))
 
     def _get_batch_fmtstr(self, num_batches):
-        num_digits = len(str(num_batches // 1))
+        num_digits = len(str(num_batches // 1)) #数字位数
         fmt = '{:' + str(num_digits) + 'd}'
         return '[' + fmt + '/' + fmt.format(num_batches) + ']'
 
